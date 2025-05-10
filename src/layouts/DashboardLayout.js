@@ -1,4 +1,3 @@
-// File: frontend/src/layouts/DashboardLayout.js
 import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -13,7 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 
 const DashboardLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -23,7 +22,6 @@ const DashboardLayout = () => {
     navigate('/login');
   };
 
-  // Menu items configuration
   const menuItems = [
     {
       title: 'Dashboard',
@@ -36,7 +34,7 @@ const DashboardLayout = () => {
       icon: <IconBuildingSkyscraper size={24} stroke={1.5} />,
       path: '/tenants',
       permission: 'view_tenant',
-      requiredUserType: 'master_admin' 
+      requiredUserType: 'master_admin'
     },
     {
       title: 'User Management',
@@ -70,42 +68,34 @@ const DashboardLayout = () => {
           >
             <IconMenu2 />
           </button>
-          
+
           <h1 className="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
-            <Link to="/">
-              SaaS Platform
-            </Link>
+            <Link to="/">SaaS Platform</Link>
           </h1>
-          
+
           <div className="navbar-nav flex-row order-md-last">
             <div className="nav-item dropdown">
-              <a 
-                href="#" 
-                className="nav-link d-flex lh-1 text-reset p-0" 
+              <button
+                type="button"
+                className="nav-link d-flex lh-1 text-reset p-0 bg-transparent border-0"
                 data-bs-toggle="dropdown"
               >
-                <div className="d-none d-xl-block ps-2">
+                <div className="d-none d-xl-block ps-2 text-start">
                   <div>{user?.firstName} {user?.lastName}</div>
                   <div className="mt-1 small text-muted">{user?.userType?.replace('_', ' ')}</div>
                 </div>
-              </a>
+              </button>
               <div className="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-                <a href="#" className="dropdown-item">Profile</a>
-                <a href="#" className="dropdown-item">Settings</a>
+                <Link to="/profile" className="dropdown-item">Profile</Link>
+                <Link to="/settings" className="dropdown-item">Settings</Link>
                 <div className="dropdown-divider"></div>
-                <a 
-                  href="#" 
-                  className="dropdown-item" 
-                  onClick={handleLogout}
-                >
-                  Logout
-                </a>
+                <button className="dropdown-item" onClick={handleLogout}>Logout</button>
               </div>
             </div>
           </div>
         </div>
       </header>
-      
+
       <div className="page-wrapper">
         <div className="page-body">
           <div className="container-xl">
@@ -116,7 +106,7 @@ const DashboardLayout = () => {
                   <div className="card-body">
                     <div className="d-flex flex-column">
                       <ul className="nav nav-pills nav-vertical">
-                        {menuItems.map((item, index) => (
+                       {menuItems.map((item, index) => (
                         // Only show menu items for the appropriate user type
                         (!item.requiredUserType || user.userType === item.requiredUserType) && (
                             <li 
@@ -138,25 +128,22 @@ const DashboardLayout = () => {
                         )
                         ))}
                         <li className="nav-item mt-auto">
-                          <a 
-                            href="#" 
-                            className="nav-link" 
+                          <button 
                             onClick={handleLogout}
+                            className="nav-link w-100 text-start bg-transparent border-0"
                           >
                             <span className="nav-link-icon">
                               <IconLogout size={24} stroke={1.5} />
                             </span>
-                            <span className="nav-link-title">
-                              Logout
-                            </span>
-                          </a>
+                            <span className="nav-link-title">Logout</span>
+                          </button>
                         </li>
                       </ul>
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               {/* Main Content */}
               <div className="col-md-9 col-lg-10">
                 <Outlet />
@@ -164,7 +151,7 @@ const DashboardLayout = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Footer */}
         <footer className="footer footer-transparent d-print-none">
           <div className="container-xl">

@@ -1,7 +1,7 @@
-// File: frontend/src/contexts/AuthContext.js
+// src/contexts/AuthContext.js
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';  // Update to use correct import
 import { API_URL } from '../config';
 
 // Create context
@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
 
       try {
         // Decode token to check expiration
-        const decoded = jwt_decode(token);
+        const decoded = jwtDecode(token);
         
         // Check if token is expired
         if (decoded.exp * 1000 < Date.now()) {
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     verifyToken();
-  }, []);
+  }, [token]);
 
   // Login function
   const login = async (email, password) => {

@@ -1,7 +1,9 @@
 // File: frontend/src/pages/dashboard/Dashboard.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';  // Added useEffect import
 import { useQuery } from 'react-query';
 import axios from 'axios';
+import io from 'socket.io-client';
+
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -10,6 +12,35 @@ import { API_URL } from '../../config';
 
 const Dashboard = () => {
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [socket, setSocket] = useState(null);
+  const [realTimeMetrics, setRealTimeMetrics] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  
+  // Initialize socket connection
+  useEffect(() => {
+    // Create socket connection
+    const newSocket = io(API_URL);
+    
+    // Setup socket listeners
+    newSocket.on('dashboard-update', (data) => {
+      console.log('Received real-time dashboard update:', data);
+      setRealTimeMetrics(data);
+    });
+    
+    // Listen for audit log events
+    newSocket.on('new-audit-log', (log) => {
+      console.log('New audit log:', log);
+      // Update local state to show the new log
+      setAuditLogs(prevLogs => [log, ...prevLogs.slice(0, 4)]);
+    });
+    
+    setSocket(newSocket);
+    
+    // Cleanup on unmount
+    return () => {
+      if (newSocket) newSocket.disconnect();
+    };
+  }, []);
   
   // Mock data for fallback when API fails
   const mockData = {
@@ -94,6 +125,9 @@ const Dashboard = () => {
   // Determine if we should use mock data in production mode
   const useMockData = !data && !isLoading;
 
+  // Use actual data, real-time data, or mockData if needed
+  const displayData = realTimeMetrics || data || mockData;
+
   if (isLoading) {
     return (
       <div className="card">
@@ -148,9 +182,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  // Use actual data or mockData if needed
-  const displayData = data || mockData;
 
   return (
     <div>
@@ -327,7 +358,8 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(displayData?.recentAuditLogs || []).map((log) => (
+                  {/* Use real-time audit logs if available, otherwise use from API or mock data */}
+                  {(auditLogs.length > 0 ? auditLogs : displayData?.recentAuditLogs || []).map((log) => (
                     <tr key={log.id}>
                       <td>{typeof log.userName === 'string' ? log.userName : 'Unknown User'}</td>
                       <td>{log.action}</td>

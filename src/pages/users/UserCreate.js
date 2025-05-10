@@ -1,14 +1,17 @@
-// File: frontend/src/pages/users/UserCreate.js
-import React from 'react';
+// src/pages/users/UserCreate.js - Add tenant query
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from 'react-query';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { userAPI, roleAPI } from '../../services/api.service';
+import { useAuth } from '../../contexts/AuthContext';
+import { userAPI, roleAPI, tenantAPI } from '../../services/api.service';
 
 const UserCreate = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
+  const [selectedTenant, setSelectedTenant] = useState(null);
   
   // Fetch available roles
   const { 
@@ -19,6 +22,21 @@ const UserCreate = () => {
     async () => {
       const res = await roleAPI.getRoles();
       return res.data.roles;
+    }
+  );
+  
+  // Fetch tenants if user is master_admin
+  const { 
+    data: tenantsData,
+    isLoading: tenantsLoading
+  } = useQuery(
+    'tenants',
+    async () => {
+      const res = await tenantAPI.getTenants();
+      return res.data.tenants;
+    },
+    {
+      enabled: currentUser?.userType === 'master_admin'
     }
   );
   
@@ -55,7 +73,12 @@ const UserCreate = () => {
     userType: Yup.string()
       .required('User type is required'),
     initialRoles: Yup.array()
-      .min(1, 'At least one role must be selected')
+      .min(1, 'At least one role must be selected'),
+    tenantId: Yup.string()
+      .when('userType', {
+        is: (value) => value === 'tenant_admin' || value === 'tenant_user',
+        then: Yup.string().required('Tenant is required for tenant users')
+      })
   });
   
   // Form setup
@@ -68,7 +91,8 @@ const UserCreate = () => {
       confirmPassword: '',
       userType: 'tenant_user',
       isActive: true,
-      initialRoles: []
+      initialRoles: [],
+      tenantId: currentUser?.userType !== 'master_admin' ? currentUser?.tenantId : ''
     },
     validationSchema,
     onSubmit: (values) => {
@@ -80,7 +104,8 @@ const UserCreate = () => {
         password: values.password,
         userType: values.userType,
         isActive: values.isActive,
-        initialRoles: values.initialRoles
+        initialRoles: values.initialRoles,
+        tenantId: values.tenantId
       };
       
       createMutation.mutate(userData);
@@ -100,6 +125,23 @@ const UserCreate = () => {
     } else {
       // Add role
       formik.setFieldValue('initialRoles', [...currentRoles, roleId]);
+    }
+  };
+
+  // Handle user type change - reset tenant and roles if needed
+  const handleUserTypeChange = (e) => {
+    const newUserType = e.target.value;
+    formik.setFieldValue('userType', newUserType);
+    
+    // Reset roles when changing user type
+    formik.setFieldValue('initialRoles', []);
+    
+    // Set tenant ID automatically for tenant users if current user is not master_admin
+    if (currentUser?.userType !== 'master_admin' && 
+       (newUserType === 'tenant_admin' || newUserType === 'tenant_user')) {
+      formik.setFieldValue('tenantId', currentUser.tenantId);
+    } else if (newUserType === 'master_admin') {
+      formik.setFieldValue('tenantId', '');
     }
   };
   
@@ -213,11 +255,14 @@ const UserCreate = () => {
                 className={`form-select ${formik.touched.userType && formik.errors.userType ? 'is-invalid' : ''}`}
                 id="userType"
                 name="userType"
-                onChange={formik.handleChange}
+                onChange={handleUserTypeChange}
                 onBlur={formik.handleBlur}
                 value={formik.values.userType}
+                disabled={currentUser?.userType !== 'master_admin'}
               >
-                <option value="master_admin">Master Admin</option>
+                {currentUser?.userType === 'master_admin' && (
+                  <option value="master_admin">Master Admin</option>
+                )}
                 <option value="tenant_admin">Tenant Admin</option>
                 <option value="tenant_user">Tenant User</option>
               </select>
@@ -255,6 +300,32 @@ const UserCreate = () => {
             </div>
           </div>
           
+          {/* Tenant selection for master admin */}
+          {currentUser?.userType === 'master_admin' &&
+           (formik.values.userType === 'tenant_admin' || formik.values.userType === 'tenant_user') && (
+            <div className="mb-3">
+              <label className="form-label required">Tenant</label>
+              <select
+                className={`form-select ${formik.touched.tenantId && formik.errors.tenantId ? 'is-invalid' : ''}`}
+                id="tenantId"
+                name="tenantId"
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                value={formik.values.tenantId}
+              >
+                <option value="">Select Tenant</option>
+                {tenantsData?.map(tenant => (
+                  <option key={tenant._id} value={tenant._id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </select>
+              {formik.touched.tenantId && formik.errors.tenantId && (
+                <div className="invalid-feedback">{formik.errors.tenantId}</div>
+              )}
+            </div>
+          )}
+          
           <div className="mb-3">
             <label className="form-label required">Assigned Roles</label>
             
@@ -274,30 +345,42 @@ const UserCreate = () => {
                       </div>
                     </div>
                   ) : (
-                    rolesData?.map((role) => (
-                      <div key={role._id} className="list-group-item">
-                        <div className="row align-items-center">
-                          <div className="col-auto">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              id={`role-${role._id}`}
-                              checked={formik.values.initialRoles.includes(role._id)}
-                              onChange={() => handleRoleChange(role._id)}
-                            />
-                          </div>
-                          <div className="col">
-                            <label className="form-check-label" htmlFor={`role-${role._id}`}>
-                              {role.name}
-                            </label>
-                            <div className="text-muted small">{role.description}</div>
-                            {role.isSystemRole && (
-                              <span className="badge bg-blue-lt">System Role</span>
-                            )}
+                    rolesData?.map((role) => {
+                      // For tenant users, only show non-system roles or system roles that are specifically for tenants
+                      const isTenantUser = formik.values.userType === 'tenant_admin' || formik.values.userType === 'tenant_user';
+                      const isMasterAdmin = formik.values.userType === 'master_admin';
+                      
+                      // Filter roles based on user type
+                      if ((isTenantUser && role.isSystemRole && role.name !== 'Tenant Admin' && role.name !== 'Tenant User') ||
+                          (isMasterAdmin && !role.isSystemRole)) {
+                        return null;
+                      }
+                      
+                      return (
+                        <div key={role._id} className="list-group-item">
+                          <div className="row align-items-center">
+                            <div className="col-auto">
+                              <input
+                                type="checkbox"
+                                className="form-check-input"
+                                id={`role-${role._id}`}
+                                checked={formik.values.initialRoles.includes(role._id)}
+                                onChange={() => handleRoleChange(role._id)}
+                              />
+                            </div>
+                            <div className="col">
+                              <label className="form-check-label" htmlFor={`role-${role._id}`}>
+                                {role.name}
+                              </label>
+                              <div className="text-muted small">{role.description}</div>
+                              {role.isSystemRole && (
+                                <span className="badge bg-blue-lt">System Role</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

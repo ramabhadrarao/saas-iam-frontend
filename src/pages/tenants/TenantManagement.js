@@ -12,6 +12,7 @@ import {
   IconPlayerPlay
 } from '@tabler/icons-react';
 import { tenantAPI } from '../../services/api.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TenantManagement = () => {
      const { user } = useAuth();
