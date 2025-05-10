@@ -4,6 +4,7 @@ import { useQuery } from 'react-query';
 import axios from 'axios';
 import { IconSearch, IconFilter, IconDownload } from '@tabler/icons-react';
 import { API_URL } from '../../config';
+// import { safeRender } from '../../utils/format';
 
 const AuditLogs = () => {
   const [page, setPage] = useState(1);
@@ -105,6 +106,34 @@ const AuditLogs = () => {
       default:
         return 'badge bg-secondary';
     }
+  };
+
+  // Format user name - FIX: Handle user object properly
+  const formatUserName = (user) => {
+    if (!user) return 'N/A';
+    if (typeof user === 'string') return user;
+    
+    // If user is an object with fullName property
+    if (user.fullName) return user.fullName;
+    
+    // If user is an object with firstName and lastName properties
+    if (user.firstName && user.lastName) 
+      return `${user.firstName} ${user.lastName}`;
+    
+    // If user has only id
+    return user._id || 'Unknown';
+  };
+
+  // Format tenant name - FIX: Handle tenant object properly
+  const formatTenantName = (tenant) => {
+    if (!tenant) return 'N/A';
+    if (typeof tenant === 'string') return tenant;
+    
+    // If tenant is an object with name property
+    if (tenant.name) return tenant.name;
+    
+    // If tenant has only id
+    return tenant._id || 'Unknown';
   };
 
   // Export logs to CSV
@@ -238,7 +267,7 @@ const AuditLogs = () => {
                 <option value="TENANT">Tenant</option>
               </select>
             </div>
-            // File: frontend/src/pages/auditing/AuditLogs.js (continued)
+            
             <div className="col-md-3 mb-3">
               <label className="form-label">Start Date</label>
               <input
@@ -318,7 +347,8 @@ const AuditLogs = () => {
             ) : (
               data?.logs?.map((log) => (
                 <tr key={log._id}>
-                  <td>{log.user?.fullName || log.userId}</td>
+                  {/* FIX: Properly format user data */}
+                  <td>{formatUserName(log.user) || log.userId || 'N/A'}</td>
                   <td>
                     <span className={getActionBadge(log.action)}>
                       {log.action}
@@ -327,7 +357,8 @@ const AuditLogs = () => {
                   <td>{log.module}</td>
                   <td>{log.description}</td>
                   <td>{log.ipAddress}</td>
-                  <td>{log.tenant?.name || (log.tenantId ? log.tenantId : 'N/A')}</td>
+                  {/* FIX: Properly format tenant data */}
+                  <td>{formatTenantName(log.tenant) || (log.tenantId ? log.tenantId : 'N/A')}</td>
                   <td>{formatDate(log.createdAt)}</td>
                 </tr>
               ))

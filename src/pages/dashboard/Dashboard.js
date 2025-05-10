@@ -1,5 +1,5 @@
 // File: frontend/src/pages/dashboard/Dashboard.js
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import axios from 'axios';
 import { 
@@ -9,12 +9,68 @@ import {
 import { API_URL } from '../../config';
 
 const Dashboard = () => {
-  // Fetch dashboard metrics
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
+  
+  // Mock data for fallback when API fails
+  const mockData = {
+    totalUsers: 123,
+    userGrowth: 7,
+    activeSessions: 42,
+    sessionIncrease: 5,
+    customRoles: 15,
+    failedLogins: 7,
+    failedLoginIncrease: -3,
+    activityTrend: Array(7).fill(0).map((_, i) => ({
+      date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString('en-US', { weekday: 'short' }),
+      count: Math.floor(Math.random() * 50) + 10
+    })),
+    userDistribution: [
+      { name: 'Master Admin', value: 5 },
+      { name: 'Tenant Admin', value: 15 },
+      { name: 'Tenant User', value: 80 }
+    ],
+    roleUsage: [
+      { name: 'Super Admin', count: 2 },
+      { name: 'Admin', count: 8 },
+      { name: 'Editor', count: 25 },
+      { name: 'Viewer', count: 40 },
+      { name: 'Custom', count: 15 }
+    ],
+    recentAuditLogs: Array(5).fill(0).map((_, i) => ({
+      id: i,
+      userName: `User ${i+1}`,
+      action: ['LOGIN', 'UPDATE', 'CREATE', 'DELETE', 'VIEW'][i],
+      module: ['AUTH', 'USER', 'ROLE', 'PERMISSION', 'TENANT'][i],
+      createdAt: new Date(Date.now() - i * 3600000).toISOString()
+    }))
+  };
+
+  // Fetch dashboard metrics with improved error handling
   const { data, isLoading, error } = useQuery(
     'dashboard-metrics',
     async () => {
-      const res = await axios.get(`${API_URL}/api/v1/dashboard/metrics`);
-      return res.data;
+      try {
+        console.log("Fetching dashboard metrics from:", `${API_URL}/api/v1/dashboard/metrics`);
+        const res = await axios.get(`${API_URL}/api/v1/dashboard/metrics`);
+        console.log("Dashboard API response:", res.data);
+        return res.data;
+      } catch (err) {
+        console.error("Dashboard API error:", err);
+        // Re-throw the error for React Query to handle
+        throw err;
+      }
+    },
+    {
+      retry: 1,  // Retry once if the request fails
+      staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+      onError: (err) => {
+        console.error("Dashboard API error details:", {
+          message: err.message,
+          status: err.response?.status,
+          statusText: err.response?.statusText,
+          data: err.response?.data
+        });
+      }
     }
   );
 
@@ -22,31 +78,21 @@ const Dashboard = () => {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   // Create activity trend data
-  const activityData = data?.activityTrend || Array(7).fill(0).map((_, i) => ({
-    date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString('en-US', { weekday: 'short' }),
-    count: Math.floor(Math.random() * 50) + 10
-  }));
+  const activityData = data?.activityTrend || mockData.activityTrend;
 
   // Create user distribution data
-  const userDistributionData = data?.userDistribution || [
-    { name: 'Master Admin', value: 5 },
-    { name: 'Tenant Admin', value: 15 },
-    { name: 'Tenant User', value: 80 }
-  ];
+  const userDistributionData = data?.userDistribution || mockData.userDistribution;
 
   // Create role usage data
-  const roleUsageData = data?.roleUsage || [
-    { name: 'Super Admin', count: 2 },
-    { name: 'Admin', count: 8 },
-    { name: 'Editor', count: 25 },
-    { name: 'Viewer', count: 40 },
-    { name: 'Custom', count: 15 }
-  ];
+  const roleUsageData = data?.roleUsage || mockData.roleUsage;
 
   // Format numbers with commas
   const formatNumber = (num) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
+
+  // Determine if we should use mock data in production mode
+  const useMockData = !data && !isLoading;
 
   if (isLoading) {
     return (
@@ -64,15 +110,56 @@ const Dashboard = () => {
   if (error) {
     return (
       <div className="card">
-        <div className="card-body text-center py-5 text-danger">
-          Failed to load dashboard data
+        <div className="card-body text-center py-5">
+          <div className="text-danger mb-3">Failed to load dashboard data</div>
+          
+          {useMockData ? (
+            <div className="alert alert-warning">
+              <strong>Using demo data.</strong> This is sample data for preview purposes.
+            </div>
+          ) : (
+            <>
+              <button 
+                className="btn btn-outline-danger btn-sm" 
+                onClick={() => setShowErrorDetails(!showErrorDetails)}
+              >
+                {showErrorDetails ? 'Hide Error Details' : 'Show Error Details'}
+              </button>
+              
+              {showErrorDetails && (
+                <div className="mt-3 text-start">
+                  <div className="alert alert-danger">
+                    <h4 className="alert-heading">Error Details</h4>
+                    <p><strong>Message:</strong> {error.message}</p>
+                    <p><strong>Status:</strong> {error.response?.status} {error.response?.statusText}</p>
+                    <hr />
+                    <p className="mb-0"><strong>API URL:</strong> {API_URL}/api/v1/dashboard/metrics</p>
+                    {error.response?.data && (
+                      <pre className="mt-2">
+                        {JSON.stringify(error.response.data, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     );
   }
 
+  // Use actual data or mockData if needed
+  const displayData = data || mockData;
+
   return (
     <div>
+      {useMockData && (
+        <div className="alert alert-warning mb-4">
+          <strong>Note:</strong> Using demo data. Connect to a backend API for real data.
+        </div>
+      )}
+      
       <div className="page-header d-print-none">
         <div className="container-xl">
           <div className="row align-items-center">
@@ -92,12 +179,12 @@ const Dashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="subheader">Total Users</div>
               </div>
-              <div className="h1 mb-3">{formatNumber(data?.totalUsers || 123)}</div>
+              <div className="h1 mb-3">{formatNumber(displayData?.totalUsers || 0)}</div>
               <div className="d-flex mb-2">
                 <div>Active users in the system</div>
                 <div className="ms-auto">
                   <span className="text-green d-inline-flex align-items-center lh-1">
-                    {data?.userGrowth || 7}%
+                    {displayData?.userGrowth || 0}%
                   </span>
                 </div>
               </div>
@@ -111,12 +198,12 @@ const Dashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="subheader">Active Sessions</div>
               </div>
-              <div className="h1 mb-3">{formatNumber(data?.activeSessions || 42)}</div>
+              <div className="h1 mb-3">{formatNumber(displayData?.activeSessions || 0)}</div>
               <div className="d-flex mb-2">
                 <div>Current online users</div>
                 <div className="ms-auto">
                   <span className="text-green d-inline-flex align-items-center lh-1">
-                    {data?.sessionIncrease || 5}%
+                    {displayData?.sessionIncrease || 0}%
                   </span>
                 </div>
               </div>
@@ -130,7 +217,7 @@ const Dashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="subheader">Custom Roles</div>
               </div>
-              <div className="h1 mb-3">{formatNumber(data?.customRoles || 15)}</div>
+              <div className="h1 mb-3">{formatNumber(displayData?.customRoles || 0)}</div>
               <div className="d-flex mb-2">
                 <div>User-defined roles</div>
               </div>
@@ -144,12 +231,12 @@ const Dashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="subheader">Failed Logins</div>
               </div>
-              <div className="h1 mb-3">{formatNumber(data?.failedLogins || 7)}</div>
+              <div className="h1 mb-3">{formatNumber(displayData?.failedLogins || 0)}</div>
               <div className="d-flex mb-2">
                 <div>Last 24 hours</div>
                 <div className="ms-auto">
                   <span className="text-red d-inline-flex align-items-center lh-1">
-                    {data?.failedLoginIncrease || -3}%
+                    {displayData?.failedLoginIncrease || 0}%
                   </span>
                 </div>
               </div>
@@ -240,15 +327,9 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.recentAuditLogs || Array(5).fill(0).map((_, i) => ({
-                    id: i,
-                    userName: `User ${i+1}`,
-                    action: ['LOGIN', 'UPDATE', 'CREATE', 'DELETE', 'VIEW'][i],
-                    module: ['AUTH', 'USER', 'ROLE', 'PERMISSION', 'TENANT'][i],
-                    createdAt: new Date(Date.now() - i * 3600000).toISOString()
-                  }))).map((log) => (
+                  {(displayData?.recentAuditLogs || []).map((log) => (
                     <tr key={log.id}>
-                      <td>{log.userName}</td>
+                      <td>{typeof log.userName === 'string' ? log.userName : 'Unknown User'}</td>
                       <td>{log.action}</td>
                       <td>{log.module}</td>
                       <td className="text-muted">
