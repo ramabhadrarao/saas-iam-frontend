@@ -21,6 +21,11 @@ import RoleManagement from './pages/roles/RoleManagement';
 import RoleBuilder from './pages/roles/RoleBuilder';
 import AuditLogs from './pages/auditing/AuditLogs';
 
+// Tenant Pages
+import TenantManagement from './pages/tenants/TenantManagement';
+import TenantDetail from './pages/tenants/TenantDetail';
+import TenantCreate from './pages/tenants/TenantCreate';
+
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -78,6 +83,11 @@ function App() {
             <Route path="/roles" element={<RoleManagement />} />
             <Route path="/roles/create" element={<RoleBuilder />} />
             <Route path="/roles/:id" element={<RoleBuilder />} />
+            
+            {/* Tenant Management */}
+            <Route path="/tenants" element={<TenantManagement />} />
+            <Route path="/tenants/create" element={<TenantCreate />} />
+            <Route path="/tenants/:id" element={<TenantDetail />} />
             
             {/* Audit Logs */}
             <Route path="/audit-logs" element={<AuditLogs />} />

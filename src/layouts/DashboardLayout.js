@@ -6,6 +6,7 @@ import {
   IconUsers, 
   IconShield, 
   IconHistory,
+  IconBuildingSkyscraper,
   IconMenu2,
   IconBell,
   IconLogout
@@ -30,6 +31,12 @@ const DashboardLayout = () => {
       icon: <IconDashboard size={24} stroke={1.5} />,
       path: '/',
       permission: 'view_dashboard'
+    },
+    {
+      title: 'Tenant Management',
+      icon: <IconBuildingSkyscraper size={24} stroke={1.5} />,
+      path: '/tenants',
+      permission: 'view_tenant'
     },
     {
       title: 'User Management',

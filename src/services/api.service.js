@@ -152,3 +152,32 @@ export const dashboardAPI = {
   getMetrics: () => 
     apiClient.get('/api/v1/dashboard/metrics')
 };
+
+// File: frontend/src/services/api.service.js (addition to existing file)
+
+// Tenant API
+export const tenantAPI = {
+  getTenants: (params) => 
+    apiClient.get('/api/v1/tenants', { params }),
+  
+  getTenantById: (id) => 
+    apiClient.get(`/api/v1/tenants/${id}`),
+  
+  createTenant: (tenantData) => 
+    apiClient.post('/api/v1/tenants', tenantData),
+  
+  updateTenant: (id, tenantData) => 
+    apiClient.patch(`/api/v1/tenants/${id}`, tenantData),
+  
+  deleteTenant: (id) => 
+    apiClient.delete(`/api/v1/tenants/${id}`),
+  
+  suspendTenant: (id) => 
+    apiClient.post(`/api/v1/tenants/${id}/suspend`),
+  
+  restoreTenant: (id) => 
+    apiClient.post(`/api/v1/tenants/${id}/restore`),
+  
+  getTenantMetrics: (id) => 
+    apiClient.get(`/api/v1/tenants/${id}/metrics`)
+};
