@@ -27,25 +27,25 @@ const DashboardLayout = () => {
   const menuItems = [
     {
       title: 'Dashboard',
-      icon: <IconDashboard />,
+      icon: <IconDashboard size={24} stroke={1.5} />,
       path: '/',
       permission: 'view_dashboard'
     },
     {
       title: 'User Management',
-      icon: <IconUsers />,
+      icon: <IconUsers size={24} stroke={1.5} />,
       path: '/users',
       permission: 'view_users'
     },
     {
       title: 'Role Management',
-      icon: <IconShield />,
+      icon: <IconShield size={24} stroke={1.5} />,
       path: '/roles',
       permission: 'view_roles'
     },
     {
       title: 'Audit Logs',
-      icon: <IconHistory />,
+      icon: <IconHistory size={24} stroke={1.5} />,
       path: '/audit-logs',
       permission: 'view_audit_logs'
     }
@@ -79,7 +79,7 @@ const DashboardLayout = () => {
               >
                 <div className="d-none d-xl-block ps-2">
                   <div>{user?.firstName} {user?.lastName}</div>
-                  <div className="mt-1 small text-muted">{user?.userType}</div>
+                  <div className="mt-1 small text-muted">{user?.userType?.replace('_', ' ')}</div>
                 </div>
               </a>
               <div className="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -134,7 +134,7 @@ const DashboardLayout = () => {
                             onClick={handleLogout}
                           >
                             <span className="nav-link-icon">
-                              <IconLogout />
+                              <IconLogout size={24} stroke={1.5} />
                             </span>
                             <span className="nav-link-title">
                               Logout
