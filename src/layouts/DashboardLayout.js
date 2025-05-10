@@ -8,7 +8,6 @@ import {
   IconHistory,
   IconBuildingSkyscraper,
   IconMenu2,
-  IconBell,
   IconLogout
 } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,7 +35,8 @@ const DashboardLayout = () => {
       title: 'Tenant Management',
       icon: <IconBuildingSkyscraper size={24} stroke={1.5} />,
       path: '/tenants',
-      permission: 'view_tenant'
+      permission: 'view_tenant',
+      requiredUserType: 'master_admin' 
     },
     {
       title: 'User Management',
@@ -117,22 +117,25 @@ const DashboardLayout = () => {
                     <div className="d-flex flex-column">
                       <ul className="nav nav-pills nav-vertical">
                         {menuItems.map((item, index) => (
-                          <li 
+                        // Only show menu items for the appropriate user type
+                        (!item.requiredUserType || user.userType === item.requiredUserType) && (
+                            <li 
                             key={index} 
                             className="nav-item"
-                          >
-                            <Link 
-                              to={item.path} 
-                              className={`nav-link ${location.pathname === item.path ? 'active' : ''}`}
                             >
-                              <span className="nav-link-icon">
+                            <Link 
+                                to={item.path} 
+                                className={`nav-link ${location.pathname === item.path ? 'active' : ''}`}
+                            >
+                                <span className="nav-link-icon">
                                 {item.icon}
-                              </span>
-                              <span className="nav-link-title">
+                                </span>
+                                <span className="nav-link-title">
                                 {item.title}
-                              </span>
+                                </span>
                             </Link>
-                          </li>
+                            </li>
+                        )
                         ))}
                         <li className="nav-item mt-auto">
                           <a 

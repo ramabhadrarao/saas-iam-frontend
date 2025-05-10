@@ -1,8 +1,9 @@
 // File: frontend/src/pages/tenants/TenantDetail.js
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link  } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useFormik } from 'formik';
+import TenantLimitsPanel from '../../components/TenantLimitsPanel';
 import * as Yup from 'yup';
 import { 
   IconBuildingSkyscraper, 
@@ -575,6 +576,11 @@ const TenantDetail = () => {
       </div>
       
       <div className="col-md-4">
+        {/* User Limits Panel */}
+        <div className="mb-3">
+          <TenantLimitsPanel tenantId={id} />
+        </div>
+        
         <div className="card mb-3">
           <div className="card-header">
             <h3 className="card-title">

@@ -179,5 +179,12 @@ export const tenantAPI = {
     apiClient.post(`/api/v1/tenants/${id}/restore`),
   
   getTenantMetrics: (id) => 
-    apiClient.get(`/api/v1/tenants/${id}/metrics`)
+    apiClient.get(`/api/v1/tenants/${id}/metrics`),
+  // Get tenant with usage data
+  getTenantWithUsage: (id) => 
+    apiClient.get(`/api/v1/tenants/${id}/usage`),
+  
+  // Update tenant limits
+  updateTenantLimits: (id, limits) => 
+    apiClient.patch(`/api/v1/tenants/${id}/limits`, limits)
 };

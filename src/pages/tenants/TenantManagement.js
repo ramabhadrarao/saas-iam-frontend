@@ -14,6 +14,7 @@ import {
 import { tenantAPI } from '../../services/api.service';
 
 const TenantManagement = () => {
+     const { user } = useAuth();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -192,15 +193,18 @@ const TenantManagement = () => {
 
   return (
     <div className="card">
-      <div className="card-header">
-        <h3 className="card-title">Tenant Management</h3>
-        <div className="card-actions">
-          <Link to="/tenants/create" className="btn btn-primary">
-            <IconPlus className="icon" />
-            Add New Tenant
-          </Link>
-        </div>
-      </div>
+       <div className="card-header">
+    <h3 className="card-title">Tenant Management</h3>
+    <div className="card-actions">
+      {/* Only show Add New Tenant button for master admins */}
+      {user?.userType === 'master_admin' && (
+        <Link to="/tenants/create" className="btn btn-primary">
+          <IconPlus className="icon" />
+          Add New Tenant
+        </Link>
+      )}
+    </div>
+  </div>
       
       {actionModal.show && (
         <div className="card mb-3 mx-3 mt-3">

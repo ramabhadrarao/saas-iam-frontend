@@ -52,6 +52,36 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+
+
+// Create a MasterAdminRoute component for master-admin-only routes
+const MasterAdminRoute = ({ children }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="page page-center">
+        <div className="container container-slim py-4">
+          <div className="text-center">
+            <div className="loader-dots"></div>
+            <h3>Loading...</h3>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  
+  // Check if user is a master admin
+  if (user?.userType !== 'master_admin') {
+    return <Navigate to="/" />;
+  }
+  
+  return children;
+};
 function App() {
   return (
     <AuthProvider>
@@ -86,7 +116,16 @@ function App() {
             
             {/* Tenant Management */}
             <Route path="/tenants" element={<TenantManagement />} />
-            <Route path="/tenants/create" element={<TenantCreate />} />
+            <Route 
+  path="/tenants/create" 
+  element={
+    <MasterAdminRoute>
+      <DashboardLayout>
+        <TenantCreate />
+      </DashboardLayout>
+    </MasterAdminRoute>
+  } 
+/>
             <Route path="/tenants/:id" element={<TenantDetail />} />
             
             {/* Audit Logs */}
