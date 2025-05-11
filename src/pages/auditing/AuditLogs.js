@@ -1,43 +1,69 @@
-// File: frontend/src/pages/auditing/AuditLogs.js
+// src/pages/auditing/AuditLogs.js
 import React, { useState } from 'react';
-import { useQuery } from 'react-query';
-import axios from 'axios';
-import { IconSearch, IconFilter, IconDownload } from '@tabler/icons-react';
-import { API_URL } from '../../config';
-// import { safeRender } from '../../utils/format';
+import { 
+  IconSearch, 
+  IconFilter, 
+  IconDownload, 
+  IconRefresh, 
+  IconCalendar,
+  IconCheck,
+  IconX,
+  IconChevronDown,
+  IconChevronUp,
+  IconAdjustments
+} from '@tabler/icons-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { MODULES, ACTIONS } from '../../config';
+import useAuditLogs from '../../hooks/useAuditLogs';
+import AuditLogTable from '../../components/auditing/AuditLogTable';
 
+/**
+ * AuditLogs component for displaying and managing audit logs
+ */
 const AuditLogs = () => {
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(15);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState({
-    action: '',
-    module: '',
-    startDate: '',
-    endDate: ''
+  const { hasPermission } = useAuth();
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Use the custom hook with auto-refresh if user has permission
+  const {
+    logs,
+    pagination,
+    isLoading,
+    isFetching,
+    error,
+    exportLoading,
+    page,
+    limit,
+    search,
+    filter,
+    dateRange,
+    setSearch,
+    setLimit,
+    updateFilter,
+    updateDateRange,
+    handlePageChange,
+    applyFilters,
+    resetFilters,
+    exportLogs,
+    refetch,
+    retry
+  } = useAuditLogs({
+    autoRefresh: hasPermission('read_audit'),
+    refreshInterval: 30000, // 30 seconds
+    defaultLimit: 15
   });
 
-  // Fetch audit logs with React Query
-  const { data, isLoading, error, refetch } = useQuery(
-    ['audit-logs', page, limit, search, filter],
-    async () => {
-      const params = new URLSearchParams({
-        page,
-        limit,
-        ...(search && { search }),
-        ...(filter.action && { action: filter.action }),
-        ...(filter.module && { module: filter.module }),
-        ...(filter.startDate && { startDate: filter.startDate }),
-        ...(filter.endDate && { endDate: filter.endDate })
-      });
-      
-      const res = await axios.get(`${API_URL}/api/v1/audit-logs?${params}`);
-      return res.data;
-    },
-    {
-      keepPreviousData: true
-    }
-  );
+  // Format moduleNames for filter dropdown
+  const moduleNames = Object.entries(MODULES).map(([key, value]) => ({
+    key: value,
+    name: key.charAt(0) + key.slice(1).toLowerCase().replace('_', ' ')
+  }));
+
+  // Format actionNames for filter dropdown
+  const actionNames = Object.entries(ACTIONS).map(([key, value]) => ({
+    key: value,
+    name: key.charAt(0) + key.slice(1).toLowerCase()
+  }));
 
   // Handle search input change
   const handleSearchChange = (e) => {
@@ -47,142 +73,55 @@ const AuditLogs = () => {
   // Handle search form submit
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    setPage(1); // Reset to first page
-    refetch();
+    applyFilters();
   };
 
   // Handle filter change
   const handleFilterChange = (e) => {
-    setFilter({
-      ...filter,
-      [e.target.name]: e.target.value
-    });
+    updateFilter(e.target.name, e.target.value);
   };
 
-  // Apply filters
-  const applyFilters = () => {
-    setPage(1); // Reset to first page
-    refetch();
-  };
-
-  // Reset filters
-  const resetFilters = () => {
-    setFilter({
-      action: '',
-      module: '',
-      startDate: '',
-      endDate: ''
-    });
-    setPage(1);
-    refetch();
-  };
-
-  // Handle page change
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= (data?.pagination?.pages || 1)) {
-      setPage(newPage);
-    }
-  };
-
-  // Format date for display
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  // Get action badge class
-  const getActionBadge = (action) => {
-    switch (action) {
-      case 'LOGIN':
-      case 'VIEW':
-        return 'badge bg-blue';
-      case 'CREATE':
-        return 'badge bg-green';
-      case 'UPDATE':
-        return 'badge bg-yellow';
-      case 'DELETE':
-        return 'badge bg-red';
-      case 'LOGOUT':
-        return 'badge bg-gray';
-      default:
-        return 'badge bg-secondary';
-    }
-  };
-
-  // Format user name - FIX: Handle user object properly
-  const formatUserName = (user) => {
-    if (!user) return 'N/A';
-    if (typeof user === 'string') return user;
-    
-    // If user is an object with fullName property
-    if (user.fullName) return user.fullName;
-    
-    // If user is an object with firstName and lastName properties
-    if (user.firstName && user.lastName) 
-      return `${user.firstName} ${user.lastName}`;
-    
-    // If user has only id
-    return user._id || 'Unknown';
-  };
-
-  // Format tenant name - FIX: Handle tenant object properly
-  const formatTenantName = (tenant) => {
-    if (!tenant) return 'N/A';
-    if (typeof tenant === 'string') return tenant;
-    
-    // If tenant is an object with name property
-    if (tenant.name) return tenant.name;
-    
-    // If tenant has only id
-    return tenant._id || 'Unknown';
-  };
-
-  // Export logs to CSV
-  const exportLogs = async () => {
-    try {
-      const params = new URLSearchParams({
-        export: 'csv',
-        ...(search && { search }),
-        ...(filter.action && { action: filter.action }),
-        ...(filter.module && { module: filter.module }),
-        ...(filter.startDate && { startDate: filter.startDate }),
-        ...(filter.endDate && { endDate: filter.endDate })
-      });
-      
-      const res = await axios.get(`${API_URL}/api/v1/audit-logs/export?${params}`, {
-        responseType: 'blob'
-      });
-      
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      console.error('Export failed:', err);
-      alert('Failed to export audit logs');
-    }
+  // Handle date range change
+  const handleDateRangeChange = (e) => {
+    updateDateRange(e.target.name, e.target.value);
   };
 
   return (
     <div className="card">
+      {/* Card header with title and actions */}
       <div className="card-header">
-        <h3 className="card-title">Audit Logs</h3>
+        <h3 className="card-title">
+          <IconAdjustments className="icon me-2" />
+          Audit Logs
+        </h3>
         <div className="card-actions">
+          <button 
+            className="btn btn-outline-primary btn-icon me-2"
+            onClick={refetch}
+            disabled={isFetching}
+            title="Refresh data"
+          >
+            <IconRefresh className={isFetching ? 'icon icon-tabler-refresh icon-spin' : 'icon'} />
+          </button>
+          
           <button 
             className="btn btn-outline-primary btn-icon" 
             onClick={exportLogs}
+            disabled={exportLoading}
             title="Export to CSV"
           >
-            <IconDownload />
+            {exportLoading ? (
+              <span className="spinner-border spinner-border-sm" role="status"></span>
+            ) : (
+              <IconDownload className="icon" />
+            )}
           </button>
         </div>
       </div>
       
       <div className="card-body border-bottom py-3">
         <div className="d-flex">
+          {/* Length selector */}
           <div className="text-muted">
             Show
             <div className="mx-2 d-inline-block">
@@ -200,6 +139,7 @@ const AuditLogs = () => {
             entries
           </div>
           
+          {/* Search and filter controls */}
           <div className="ms-auto d-flex">
             <div className="me-2">
               <form onSubmit={handleSearchSubmit}>
@@ -221,156 +161,126 @@ const AuditLogs = () => {
               <button 
                 className="btn btn-outline-secondary" 
                 type="button" 
-                data-bs-toggle="collapse"
-                data-bs-target="#filterPanel"
+                onClick={() => setShowFilters(!showFilters)}
               >
-                <IconFilter className="icon" />
+                <IconFilter className="icon me-1" />
                 Filter
+                {showFilters ? (
+                  <IconChevronUp className="icon ms-2" size={16} />
+                ) : (
+                  <IconChevronDown className="icon ms-2" size={16} />
+                )}
               </button>
             </div>
           </div>
         </div>
         
-        <div className="collapse mt-3" id="filterPanel">
-          <div className="row">
-            <div className="col-md-3 mb-3">
-              <label className="form-label">Action</label>
-              <select 
-                className="form-select" 
-                name="action"
-                value={filter.action}
-                onChange={handleFilterChange}
+        {/* Filter panel */}
+        {showFilters && (
+          <div className="mt-3">
+            <div className="row">
+              <div className="col-md-3 mb-3">
+                <label className="form-label">Action</label>
+                <select 
+                  className="form-select" 
+                  name="action"
+                  value={filter.action}
+                  onChange={handleFilterChange}
+                >
+                  <option value="">All Actions</option>
+                  {actionNames.map(action => (
+                    <option key={action.key} value={action.key}>
+                      {action.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="col-md-3 mb-3">
+                <label className="form-label">Module</label>
+                <select 
+                  className="form-select" 
+                  name="module"
+                  value={filter.module}
+                  onChange={handleFilterChange}
+                >
+                  <option value="">All Modules</option>
+                  {moduleNames.map(module => (
+                    <option key={module.key} value={module.key}>
+                      {module.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="col-md-3 mb-3">
+                <label className="form-label">Start Date</label>
+                <div className="input-icon">
+                  <span className="input-icon-addon">
+                    <IconCalendar size={16} />
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control"
+                    name="startDate"
+                    value={dateRange.startDate}
+                    onChange={handleDateRangeChange}
+                  />
+                </div>
+              </div>
+              
+              <div className="col-md-3 mb-3">
+                <label className="form-label">End Date</label>
+                <div className="input-icon">
+                  <span className="input-icon-addon">
+                    <IconCalendar size={16} />
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control"
+                    name="endDate"
+                    value={dateRange.endDate}
+                    onChange={handleDateRangeChange}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="d-flex justify-content-end">
+              <button 
+                type="button" 
+                className="btn btn-link" 
+                onClick={resetFilters}
               >
-                <option value="">All Actions</option>
-                <option value="LOGIN">Login</option>
-                <option value="LOGOUT">Logout</option>
-                <option value="CREATE">Create</option>
-                <option value="UPDATE">Update</option>
-                <option value="DELETE">Delete</option>
-                <option value="VIEW">View</option>
-              </select>
-            </div>
-            
-            <div className="col-md-3 mb-3">
-              <label className="form-label">Module</label>
-              <select 
-                className="form-select" 
-                name="module"
-                value={filter.module}
-                onChange={handleFilterChange}
+                <IconX className="icon me-1" />
+                Reset Filters
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary ms-2" 
+                onClick={applyFilters}
               >
-                <option value="">All Modules</option>
-                <option value="AUTH">Authentication</option>
-                <option value="USER">User</option>
-                <option value="ROLE">Role</option>
-                <option value="PERMISSION">Permission</option>
-                <option value="TENANT">Tenant</option>
-              </select>
-            </div>
-            
-            <div className="col-md-3 mb-3">
-              <label className="form-label">Start Date</label>
-              <input
-                type="date"
-                className="form-control"
-                name="startDate"
-                value={filter.startDate}
-                onChange={handleFilterChange}
-              />
-            </div>
-            
-            <div className="col-md-3 mb-3">
-              <label className="form-label">End Date</label>
-              <input
-                type="date"
-                className="form-control"
-                name="endDate"
-                value={filter.endDate}
-                onChange={handleFilterChange}
-              />
+                <IconCheck className="icon me-1" />
+                Apply Filters
+              </button>
             </div>
           </div>
-          
-          <div className="d-flex justify-content-end">
-            <button 
-              type="button" 
-              className="btn btn-link" 
-              onClick={resetFilters}
-            >
-              Reset
-            </button>
-            <button 
-              type="button" 
-              className="btn btn-primary ms-2" 
-              onClick={applyFilters}
-            >
-              Apply Filters
-            </button>
-          </div>
-        </div>
+        )}
       </div>
       
-      <div className="table-responsive">
-        <table className="table card-table table-vcenter text-nowrap">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Action</th>
-              <th>Module</th>
-              <th>Description</th>
-              <th>IP Address</th>
-              <th>Tenant</th>
-              <th>Date/Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan="7" className="text-center">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                </td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan="7" className="text-center text-danger">
-                  Failed to load audit logs
-                </td>
-              </tr>
-            ) : data?.logs?.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="text-center">
-                  No audit logs found
-                </td>
-              </tr>
-            ) : (
-              data?.logs?.map((log) => (
-                <tr key={log._id}>
-                  {/* FIX: Properly format user data */}
-                  <td>{formatUserName(log.user) || log.userId || 'N/A'}</td>
-                  <td>
-                    <span className={getActionBadge(log.action)}>
-                      {log.action}
-                    </span>
-                  </td>
-                  <td>{log.module}</td>
-                  <td>{log.description}</td>
-                  <td>{log.ipAddress}</td>
-                  {/* FIX: Properly format tenant data */}
-                  <td>{formatTenantName(log.tenant) || (log.tenantId ? log.tenantId : 'N/A')}</td>
-                  <td>{formatDate(log.createdAt)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Audit logs table using our reusable component */}
+      <AuditLogTable 
+        logs={logs}
+        isLoading={isLoading}
+        error={error}
+        onRetry={retry}
+      />
       
-      {data?.pagination && (
+      {/* Pagination */}
+      {pagination && (
         <div className="card-footer d-flex align-items-center">
           <p className="m-0 text-muted">
-            Showing <span>{(page - 1) * limit + 1}</span> to <span>{Math.min(page * limit, data.pagination.total)}</span> of <span>{data.pagination.total}</span> entries
+            Showing <span>{(page - 1) * limit + 1}</span> to <span>{Math.min(page * limit, pagination.total)}</span> of <span>{pagination.total}</span> entries
           </p>
           <ul className="pagination m-0 ms-auto">
             <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
@@ -382,9 +292,9 @@ const AuditLogs = () => {
                 <span>&laquo;</span>
               </button>
             </li>
-            {Array.from({ length: Math.min(5, data.pagination.pages) }, (_, i) => {
+            {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
               // Show pages around current page
-              const totalPages = data.pagination.pages;
+              const totalPages = pagination.pages;
               const startPage = Math.max(1, Math.min(page - 2, totalPages - 4));
               const pageNumber = startPage + i;
               
@@ -402,11 +312,11 @@ const AuditLogs = () => {
                 </li>
               ) : null;
             })}
-            <li className={`page-item ${page === data.pagination.pages ? 'disabled' : ''}`}>
+            <li className={`page-item ${page === pagination.pages ? 'disabled' : ''}`}>
               <button 
                 className="page-link" 
                 onClick={() => handlePageChange(page + 1)}
-                disabled={page === data.pagination.pages}
+                disabled={page === pagination.pages}
               >
                 <span>&raquo;</span>
               </button>
