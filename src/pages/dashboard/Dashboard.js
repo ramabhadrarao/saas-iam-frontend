@@ -1,24 +1,71 @@
-// File: frontend/src/pages/dashboard/Dashboard.js
-import React, { useState, useEffect } from 'react';  // Added useEffect import
+// src/pages/dashboard/Dashboard.js
+import React, { useState, useEffect } from 'react';
 import { useQuery } from 'react-query';
-import axios from 'axios';
+import { Link } from 'react-router-dom';
 import io from 'socket.io-client';
-
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
+import { 
+  IconUsers, 
+  IconActivity,
+  IconBuildingSkyscraper,
+  IconShieldLock,
+  IconAlertTriangle,
+  IconArrowUpRight,
+  IconArrowDownRight,
+  IconInfoCircle
+} from '@tabler/icons-react';
 import { API_URL } from '../../config';
+import { useAuth } from '../../contexts/AuthContext';
+import { dashboardAPI } from '../../services/api.service';
+
+// Custom metric card component
+const MetricCard = ({ title, value, icon, change, changeType, suffix = '', tooltip }) => {
+  return (
+    <div className="card">
+      <div className="card-body">
+        <div className="d-flex align-items-center mb-3">
+          <div className="subheader">{title}</div>
+          {tooltip && (
+            <div className="ms-auto" title={tooltip}>
+              <IconInfoCircle size={16} />
+            </div>
+          )}
+        </div>
+        <div className="d-flex align-items-baseline">
+          <div className="h1 mb-0 me-2">{value}{suffix}</div>
+          {change !== undefined && (
+            <div className={`me-2 ${changeType === 'increase' ? 'text-green' : 'text-red'}`}>
+              <span className="text-nowrap d-inline-flex align-items-center">
+                {changeType === 'increase' ? (
+                  <IconArrowUpRight size={16} className="me-1" />
+                ) : (
+                  <IconArrowDownRight size={16} className="me-1" />
+                )}
+                {change}%
+              </span>
+            </div>
+          )}
+          <div className="ms-auto">
+            {icon}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard = () => {
-  const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const { user, isMasterAdmin, hasPermission } = useAuth();
   const [socket, setSocket] = useState(null);
   const [realTimeMetrics, setRealTimeMetrics] = useState(null);
-  const [auditLogs, setAuditLogs] = useState([]);
+  const [recentAuditLogs, setRecentAuditLogs] = useState([]);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
   
   // Initialize socket connection
   useEffect(() => {
-    // Create socket connection
     const newSocket = io(API_URL);
     
     // Setup socket listeners
@@ -29,9 +76,7 @@ const Dashboard = () => {
     
     // Listen for audit log events
     newSocket.on('new-audit-log', (log) => {
-      console.log('New audit log:', log);
-      // Update local state to show the new log
-      setAuditLogs(prevLogs => [log, ...prevLogs.slice(0, 4)]);
+      setRecentAuditLogs(prevLogs => [log, ...prevLogs.slice(0, 4)]);
     });
     
     setSocket(newSocket);
@@ -41,101 +86,55 @@ const Dashboard = () => {
       if (newSocket) newSocket.disconnect();
     };
   }, []);
-  
-  // Mock data for fallback when API fails
-  const mockData = {
-    totalUsers: 123,
-    userGrowth: 7,
-    activeSessions: 42,
-    sessionIncrease: 5,
-    customRoles: 15,
-    failedLogins: 7,
-    failedLoginIncrease: -3,
-    activityTrend: Array(7).fill(0).map((_, i) => ({
-      date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString('en-US', { weekday: 'short' }),
-      count: Math.floor(Math.random() * 50) + 10
-    })),
-    userDistribution: [
-      { name: 'Master Admin', value: 5 },
-      { name: 'Tenant Admin', value: 15 },
-      { name: 'Tenant User', value: 80 }
-    ],
-    roleUsage: [
-      { name: 'Super Admin', count: 2 },
-      { name: 'Admin', count: 8 },
-      { name: 'Editor', count: 25 },
-      { name: 'Viewer', count: 40 },
-      { name: 'Custom', count: 15 }
-    ],
-    recentAuditLogs: Array(5).fill(0).map((_, i) => ({
-      id: i,
-      userName: `User ${i+1}`,
-      action: ['LOGIN', 'UPDATE', 'CREATE', 'DELETE', 'VIEW'][i],
-      module: ['AUTH', 'USER', 'ROLE', 'PERMISSION', 'TENANT'][i],
-      createdAt: new Date(Date.now() - i * 3600000).toISOString()
-    }))
-  };
 
-  // Fetch dashboard metrics with improved error handling
-  const { data, isLoading, error } = useQuery(
+  // Fetch dashboard metrics
+  const { 
+    data: dashboardData, 
+    isLoading, 
+    error 
+  } = useQuery(
     'dashboard-metrics',
-    async () => {
-      try {
-        console.log("Fetching dashboard metrics from:", `${API_URL}/api/v1/dashboard/metrics`);
-        const res = await axios.get(`${API_URL}/api/v1/dashboard/metrics`);
-        console.log("Dashboard API response:", res.data);
-        return res.data;
-      } catch (err) {
-        console.error("Dashboard API error:", err);
-        // Re-throw the error for React Query to handle
-        throw err;
-      }
-    },
+    () => dashboardAPI.getMetrics(),
     {
-      retry: 1,  // Retry once if the request fails
-      staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-      onError: (err) => {
-        console.error("Dashboard API error details:", {
-          message: err.message,
-          status: err.response?.status,
-          statusText: err.response?.statusText,
-          data: err.response?.data
-        });
+      refetchInterval: 300000, // Refetch every 5 minutes
+      onSuccess: (data) => {
+        // If no real-time data yet, use this as initial data
+        if (!realTimeMetrics) {
+          setRealTimeMetrics(data.data);
+        }
+        
+        // Initialize audit logs if empty
+        if (recentAuditLogs.length === 0 && data.data.recentAuditLogs) {
+          setRecentAuditLogs(data.data.recentAuditLogs);
+        }
       }
     }
   );
 
   // Colors for charts
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+  const COLORS = ['#4361ee', '#3a0ca3', '#7209b7', '#f72585', '#4cc9f0'];
 
-  // Create activity trend data
-  const activityData = data?.activityTrend || mockData.activityTrend;
+  // Use real-time data or fallback to API data
+  const metricsData = realTimeMetrics || (dashboardData?.data) || {};
 
-  // Create user distribution data
-  const userDistributionData = data?.userDistribution || mockData.userDistribution;
-
-  // Create role usage data
-  const roleUsageData = data?.roleUsage || mockData.roleUsage;
-
-  // Format numbers with commas
+  // Format numbers for display
   const formatNumber = (num) => {
+    if (num === undefined || num === null) return 'N/A';
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  // Determine if we should use mock data in production mode
-  const useMockData = !data && !isLoading;
-
-  // Use actual data, real-time data, or mockData if needed
-  const displayData = realTimeMetrics || data || mockData;
-
   if (isLoading) {
     return (
-      <div className="card">
-        <div className="card-body text-center py-5">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+      <div className="page-body">
+        <div className="container-xl">
+          <div className="card">
+            <div className="card-body text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <div className="mt-3">Loading dashboard data...</div>
+            </div>
           </div>
-          <div className="mt-3">Loading dashboard data...</div>
         </div>
       </div>
     );
@@ -143,22 +142,23 @@ const Dashboard = () => {
 
   if (error) {
     return (
-      <div className="card">
-        <div className="card-body text-center py-5">
-          <div className="text-danger mb-3">Failed to load dashboard data</div>
-          
-          {useMockData ? (
-            <div className="alert alert-warning">
-              <strong>Using demo data.</strong> This is sample data for preview purposes.
-            </div>
-          ) : (
-            <>
-              <button 
-                className="btn btn-outline-danger btn-sm" 
-                onClick={() => setShowErrorDetails(!showErrorDetails)}
-              >
-                {showErrorDetails ? 'Hide Error Details' : 'Show Error Details'}
-              </button>
+      <div className="page-body">
+        <div className="container-xl">
+          <div className="card">
+            <div className="card-body text-center py-5">
+              <div className="text-danger mb-3">
+                <IconAlertTriangle size={40} />
+              </div>
+              <h3 className="text-danger">Failed to load dashboard data</h3>
+              
+              <div className="mt-3">
+                <button 
+                  className="btn btn-outline-danger btn-sm" 
+                  onClick={() => setShowErrorDetails(!showErrorDetails)}
+                >
+                  {showErrorDetails ? 'Hide Error Details' : 'Show Error Details'}
+                </button>
+              </div>
               
               {showErrorDetails && (
                 <div className="mt-3 text-start">
@@ -176,230 +176,310 @@ const Dashboard = () => {
                   </div>
                 </div>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {useMockData && (
-        <div className="alert alert-warning mb-4">
-          <strong>Note:</strong> Using demo data. Connect to a backend API for real data.
-        </div>
-      )}
-      
-      <div className="page-header d-print-none">
-        <div className="container-xl">
+    <div className="page-body">
+      <div className="container-xl">
+        {/* Page header */}
+        <div className="page-header d-print-none">
           <div className="row align-items-center">
             <div className="col">
               <h2 className="page-title">Dashboard</h2>
-              <div className="text-muted mt-1">IAM Analytics Overview</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Stats row */}
-      <div className="row row-deck row-cards mb-4">
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Total Users</div>
-              </div>
-              <div className="h1 mb-3">{formatNumber(displayData?.totalUsers || 0)}</div>
-              <div className="d-flex mb-2">
-                <div>Active users in the system</div>
-                <div className="ms-auto">
-                  <span className="text-green d-inline-flex align-items-center lh-1">
-                    {displayData?.userGrowth || 0}%
-                  </span>
-                </div>
+              <div className="text-muted mt-1">
+                {isMasterAdmin 
+                  ? 'Master Administration Dashboard'
+                  : `${user?.tenant?.name} Tenant Dashboard`}
               </div>
             </div>
           </div>
         </div>
         
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Active Sessions</div>
-              </div>
-              <div className="h1 mb-3">{formatNumber(displayData?.activeSessions || 0)}</div>
-              <div className="d-flex mb-2">
-                <div>Current online users</div>
-                <div className="ms-auto">
-                  <span className="text-green d-inline-flex align-items-center lh-1">
-                    {displayData?.sessionIncrease || 0}%
-                  </span>
-                </div>
-              </div>
-            </div>
+        {/* Key metrics row */}
+        <div className="row row-deck row-cards mb-4">
+          <div className="col-sm-6 col-lg-3">
+            <MetricCard
+              title="Total Users"
+              value={formatNumber(metricsData.totalUsers)}
+              icon={<IconUsers size={24} stroke={1.5} className="text-primary" />}
+              change={metricsData.userGrowth}
+              changeType="increase"
+              tooltip="Total number of active users in the system"
+            />
+          </div>
+          
+          <div className="col-sm-6 col-lg-3">
+            <MetricCard
+              title="Active Sessions"
+              value={formatNumber(metricsData.activeSessions)}
+              icon={<IconActivity size={24} stroke={1.5} className="text-green" />}
+              change={metricsData.sessionIncrease}
+              changeType={metricsData.sessionIncrease >= 0 ? "increase" : "decrease"}
+              tooltip="Number of active user sessions in the last 24 hours"
+            />
+          </div>
+          
+          <div className="col-sm-6 col-lg-3">
+            <MetricCard
+              title={isMasterAdmin ? "Custom Roles" : "Assigned Roles"}
+              value={formatNumber(metricsData.customRoles)}
+              icon={<IconShieldLock size={24} stroke={1.5} className="text-purple" />}
+              tooltip="Number of user-defined roles in the system"
+            />
+          </div>
+          
+          <div className="col-sm-6 col-lg-3">
+            <MetricCard
+              title="Failed Logins"
+              value={formatNumber(metricsData.failedLogins)}
+              icon={<IconAlertTriangle size={24} stroke={1.5} className="text-orange" />}
+              change={Math.abs(metricsData.failedLoginIncrease)}
+              changeType={metricsData.failedLoginIncrease <= 0 ? "increase" : "decrease"}
+              tooltip="Number of failed login attempts in the last 24 hours"
+            />
           </div>
         </div>
         
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Custom Roles</div>
+        {/* Charts row */}
+        <div className="row row-deck row-cards">
+          <div className="col-md-8">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">User Activity Trend</h3>
               </div>
-              <div className="h1 mb-3">{formatNumber(displayData?.customRoles || 0)}</div>
-              <div className="d-flex mb-2">
-                <div>User-defined roles</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Failed Logins</div>
-              </div>
-              <div className="h1 mb-3">{formatNumber(displayData?.failedLogins || 0)}</div>
-              <div className="d-flex mb-2">
-                <div>Last 24 hours</div>
-                <div className="ms-auto">
-                  <span className="text-red d-inline-flex align-items-center lh-1">
-                    {displayData?.failedLoginIncrease || 0}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Charts row */}
-      <div className="row row-deck row-cards">
-        <div className="col-lg-7">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">User Activity Trend</h3>
-            </div>
-            <div className="card-body">
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={activityData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="count" name="Active Users" fill="#0088FE" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="col-lg-5">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">User Distribution</h3>
-            </div>
-            <div className="card-body">
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={userDistributionData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={90}
-                      fill="#8884d8"
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              <div className="card-body">
+                <div style={{ height: '300px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={metricsData.activityTrend || []}
+                      margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
                     >
-                      {userDistributionData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `${value}%`} />
-                  </PieChart>
-                </ResponsiveContainer>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="count"
+                        name="Active Users"
+                        stroke="#4361ee"
+                        strokeWidth={2}
+                        activeDot={{ r: 8 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-      
-      {/* Audit logs and role usage */}
-      <div className="row row-deck row-cards mt-4">
-        <div className="col-md-6">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Recent Audit Logs</h3>
-              <div className="card-actions">
-                <a href="/audit-logs" className="btn btn-primary btn-sm">
-                  View All
-                </a>
+          
+          <div className="col-md-4">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">User Distribution</h3>
               </div>
-            </div>
-            <div className="card-table table-responsive">
-              <table className="table table-vcenter">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Action</th>
-                    <th>Module</th>
-                    <th>Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Use real-time audit logs if available, otherwise use from API or mock data */}
-                  {(auditLogs.length > 0 ? auditLogs : displayData?.recentAuditLogs || []).map((log) => (
-                    <tr key={log.id}>
-                      <td>{typeof log.userName === 'string' ? log.userName : 'Unknown User'}</td>
-                      <td>{log.action}</td>
-                      <td>{log.module}</td>
-                      <td className="text-muted">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="card-body">
+                <div style={{ height: '300px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={metricsData.userDistribution || []}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {(metricsData.userDistribution || []).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value} users`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
           </div>
         </div>
         
-        <div className="col-md-6">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Role Usage Distribution</h3>
-            </div>
-            <div className="card-body">
-              <div style={{ height: '250px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={roleUsageData}
-                    layout="vertical"
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="count" name="Users" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
+        {/* Audit logs and role usage */}
+        <div className="row row-deck row-cards mt-4">
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Recent Activity</h3>
+                {hasPermission('read_audit') && (
+                  <div className="card-actions">
+                    <Link to="/audit-logs" className="btn btn-primary btn-sm">
+                      View All
+                    </Link>
+                  </div>
+                )}
+              </div>
+              <div className="list-group list-group-flush overflow-auto" style={{ maxHeight: '320px' }}>
+                {recentAuditLogs.length > 0 ? (
+                  recentAuditLogs.map((log, index) => (
+                    <div key={log.id || index} className="list-group-item">
+                      <div className="row align-items-center">
+                        <div className="col-auto">
+                          <span className={`avatar bg-${
+                            log.action === 'LOGIN' ? 'blue' : 
+                            log.action === 'CREATE' ? 'green' : 
+                            log.action === 'UPDATE' ? 'orange' : 
+                            log.action === 'DELETE' ? 'red' : 'gray'
+                          }`}>
+                            {log.userName ? log.userName.charAt(0).toUpperCase() : 'U'}
+                          </span>
+                        </div>
+                        <div className="col text-truncate">
+                          <span className="text-body d-block">{log.userName || 'Unknown User'}</span>
+                          <div className="d-block text-muted text-truncate">
+                            <span className={`badge bg-${
+                              log.action === 'LOGIN' ? 'blue' : 
+                              log.action === 'CREATE' ? 'green' : 
+                              log.action === 'UPDATE' ? 'orange' : 
+                              log.action === 'DELETE' ? 'red' : 'gray'
+                            }-lt me-1`}>
+                              {log.action}
+                            </span>
+                            <span className="badge bg-secondary-lt me-1">{log.module}</span>
+                            {log.description}
+                          </div>
+                        </div>
+                        <div className="col-auto">
+                          <div className="text-muted">
+                            {new Date(log.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="list-group-item text-center py-4">
+                    <div className="text-muted">No recent activity</div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
+          
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Role Usage Distribution</h3>
+              </div>
+              <div className="card-body">
+                <div style={{ height: '280px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={metricsData.roleUsage || []}
+                      layout="vertical"
+                      margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={100} />
+                      <Tooltip formatter={(value) => `${value} users`} />
+                      <Legend />
+                      <Bar dataKey="count" name="Users" fill="#7209b7" barSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              {hasPermission('read_role') && (
+                <div className="card-footer text-center">
+                  <Link to="/roles" className="btn btn-link">Manage Roles</Link>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+        
+        {/* Tenant section - Only show for master admin */}
+        {isMasterAdmin && hasPermission('read_tenant') && (
+          <div className="row mt-4">
+            <div className="col-12">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">
+                    <IconBuildingSkyscraper className="icon me-2" />
+                    Tenant Management
+                  </h3>
+                  <div className="card-actions">
+                    <Link to="/tenants" className="btn btn-primary btn-sm">
+                      View All Tenants
+                    </Link>
+                  </div>
+                </div>
+                <div className="card-table table-responsive">
+                  <table className="table table-vcenter card-table">
+                    <thead>
+                      <tr>
+                        <th>Tenant</th>
+                        <th>Plan</th>
+                        <th>Status</th>
+                        <th>Users</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(metricsData.tenantsByStatus || []).slice(0, 5).map((tenant, index) => (
+                        <tr key={tenant.id || index}>
+                          <td>
+                            <Link to={`/tenants/${tenant.id}`} className="text-reset">
+                              <div className="d-flex align-items-center">
+                                <span className="avatar me-2 bg-blue-lt">
+                                  {tenant.name ? tenant.name.charAt(0).toUpperCase() : 'T'}
+                                </span>
+                                <div>
+                                  <span className="text-body d-block">{tenant.name}</span>
+                                  <div className="text-muted">{tenant.subdomain}.example.com</div>
+                                </div>
+                              </div>
+                            </Link>
+                          </td>
+                          <td>
+                            <span className={`badge bg-${
+                              tenant.plan === 'free' ? 'secondary' : 
+                              tenant.plan === 'starter' ? 'info' : 
+                              tenant.plan === 'professional' ? 'primary' : 
+                              'purple'
+                            }`}>
+                              {tenant.plan?.charAt(0).toUpperCase() + tenant.plan?.slice(1) || 'Free'}
+                            </span>
+                          </td>
+                          <td>
+                            {tenant.isActive ? (
+                              <span className="badge bg-success">Active</span>
+                            ) : (
+                              <span className="badge bg-danger">Suspended</span>
+                            )}
+                          </td>
+                          <td>{tenant.userCount || 0}</td>
+                          <td>
+                           <Link to={`/tenants/${tenant.id}`} className="btn btn-sm btn-primary">
+                              Manage
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

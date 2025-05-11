@@ -1,7 +1,7 @@
 // src/contexts/AuthContext.js
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';  // Update to use correct import
+import { jwtDecode } from 'jwt-decode';
 import { API_URL } from '../config';
 
 // Create context
@@ -57,13 +57,45 @@ export const AuthProvider = ({ children }) => {
     verifyToken();
   }, [token]);
 
+  // Setup token refresh interval
+  useEffect(() => {
+    if (!token) return;
+
+    // Refresh token 5 minutes before it expires
+    const decoded = jwtDecode(token);
+    const expiryTime = decoded.exp * 1000;
+    const currentTime = Date.now();
+    const timeUntilRefresh = expiryTime - currentTime - (5 * 60 * 1000); // 5 minutes before expiry
+
+    if (timeUntilRefresh <= 0) {
+      // Token is already expired or about to expire
+      refreshUserToken();
+      return;
+    }
+
+    const refreshTimer = setTimeout(() => {
+      refreshUserToken();
+    }, timeUntilRefresh);
+
+    return () => clearTimeout(refreshTimer);
+  }, [token]);
+
   // Login function
-  const login = async (email, password) => {
+  const login = async (email, password, tenantId = null, subdomain = null) => {
     try {
       setError('');
       setLoading(true);
       
-      const res = await axios.post(`${API_URL}/api/v1/auth/login`, { email, password });
+      const loginPayload = { email, password };
+      
+      // Add tenant context if provided
+      if (tenantId) {
+        loginPayload.tenantId = tenantId;
+      } else if (subdomain) {
+        loginPayload.subdomain = subdomain;
+      }
+      
+      const res = await axios.post(`${API_URL}/api/v1/auth/login`, loginPayload);
       
       // Save tokens and user data
       localStorage.setItem('token', res.data.token);
@@ -83,7 +115,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Refresh token function
-  const refreshUserToken = async () => {
+  const refreshUserToken = useCallback(async () => {
     if (!refreshToken) return false;
     
     try {
@@ -92,13 +124,18 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', res.data.token);
       setToken(res.data.token);
       
+      // Update user if provided in response
+      if (res.data.user) {
+        setUser(res.data.user);
+      }
+      
       return true;
     } catch (err) {
       console.error('Token refresh failed:', err);
       logout();
       return false;
     }
-  };
+  }, [refreshToken]);
 
   // Logout function
   const logout = async () => {
@@ -118,10 +155,47 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Check if user has permission
-  const hasPermission = (requiredPermission) => {
-    if (!user || !user.permissions) return false;
-    return user.permissions.includes(requiredPermission);
-  };
+  const hasPermission = useCallback((requiredPermission) => {
+    if (!user) return false;
+    
+    // Master admin has all permissions
+    if (user.userType === 'master_admin') {
+      return true;
+    }
+    
+    // Check user permissions array
+    if (user.permissions?.includes(requiredPermission)) {
+      return true;
+    }
+    
+    // Check permissions in user roles
+    if (user.roles && Array.isArray(user.roles)) {
+      for (const role of user.roles) {
+        if (role.permissions?.some(permission => 
+          permission.name === requiredPermission || 
+          permission === requiredPermission
+        )) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }, [user]);
+
+  // Check if user can access tenant
+  const canAccessTenant = useCallback((tenantId) => {
+    if (!user) return false;
+    
+    // Master admin can access all tenants
+    if (user.userType === 'master_admin') {
+      return true;
+    }
+    
+    // Tenant users can only access their own tenant
+    return user.tenantId === tenantId || 
+           (user.tenant && user.tenant.id === tenantId);
+  }, [user]);
 
   // Value to be provided by the context
   const value = {
@@ -133,7 +207,11 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     refreshUserToken,
-    hasPermission
+    hasPermission,
+    canAccessTenant,
+    isMasterAdmin: user?.userType === 'master_admin',
+    isTenantAdmin: user?.userType === 'tenant_admin',
+    isTenantUser: user?.userType === 'tenant_user'
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
